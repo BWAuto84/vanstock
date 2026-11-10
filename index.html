@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Van Stock</title>
+<style>
+:root{--bg:#f4f6f7;--card:#fff;--tx:#14201f;--mut:#5d6b69;--pri:#0f766e;--pri2:#0b5a54;--bad:#c62828;--badbg:#fdeaea;--bd:#dde3e2;--ok:#2e7d32}
+@media(prefers-color-scheme:dark){:root{--bg:#10171a;--card:#1a2326;--tx:#eaf1f0;--mut:#9fb0ae;--pri:#2bb3a6;--pri2:#1f8f84;--bad:#ff7a7a;--badbg:#3a1f1f;--bd:#2b3a3d;--ok:#6fcf74}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,sans-serif;padding-bottom:84px}
+header{position:sticky;top:0;z-index:5;background:var(--pri);color:#fff;padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));font-weight:700;font-size:18px}
+#banner{background:var(--badbg);color:var(--bad);padding:10px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--bad)}
+main{padding:12px 14px;max-width:700px;margin:auto}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;border:0;background:none;color:var(--mut);padding:10px 2px;font-size:12px}
+nav button b{display:block;font-size:20px}
+nav button.on{color:var(--pri);font-weight:700}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.card.low{border-color:var(--bad);background:var(--badbg)}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1;min-width:0}
+.name{font-weight:600;overflow-wrap:anywhere}
+.sub{color:var(--mut);font-size:13px}
+.big{font-size:26px;font-weight:700;min-width:48px;text-align:right}
+.low .big{color:var(--bad)}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--bd);color:var(--mut);margin-top:2px}
+button.b,label.b{display:inline-block;border:0;border-radius:10px;background:var(--pri);color:#fff;padding:12px 16px;font-size:16px;font-weight:600;text-align:center}
+button.b:active{background:var(--pri2)}
+button.b.sec{background:var(--bd);color:var(--tx)}
+button.b.bad{background:var(--bad);color:#fff}
+button.b.full{width:100%}
+.step{display:flex;align-items:center;gap:6px}
+.step button{width:42px;height:42px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:22px}
+.step span{min-width:30px;text-align:center;font-size:20px;font-weight:700}
+input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx);font-size:16px}
+label.f{display:block;margin:10px 0 4px;font-size:13px;color:var(--mut);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:99px;padding:6px 12px;font-size:14px}
+.chip.sel{background:var(--pri);color:#fff;border-color:var(--pri)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:20;display:flex;align-items:flex-end}
+.sheet>div{background:var(--bg);width:100%;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px;padding-bottom:max(16px,env(safe-area-inset-bottom));max-width:700px;margin:auto}
+#scan{position:fixed;inset:0;background:#000;z-index:30;display:flex;flex-direction:column;color:#fff}
+#scan video{flex:1;min-height:0;object-fit:cover;width:100%}
+#scan .pn{padding:12px;background:#111}
+#scan .msg{min-height:44px;font-weight:600;padding:6px 0}
+#toast{position:fixed;left:12px;right:12px;bottom:90px;z-index:40;background:#222;color:#fff;border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;max-width:680px;margin:auto}
+#toast button{background:none;border:0;color:#7fe0d6;font-weight:700;font-size:15px}
+#toast.warn{background:var(--bad)}#toast.warn button{color:#fff}
+h2{font-size:18px;margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{border-bottom:1px solid var(--bd);padding:6px 4px;text-align:left;vertical-align:top}
+.ser{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);overflow-wrap:anywhere}
+.stick{position:sticky;bottom:78px;padding-top:8px}
+@media print{header,nav,#banner,.noprint,#toast{display:none!important}body{background:#fff;color:#000;padding:0}.card{border:0}}
+</style>
+</head>
+<body>
+<header>🚐 Van Stock</header>
+<div id="banner" hidden></div>
+<main id="main"></main>
+<nav id="nav"></nav>
+<div id="sheet" class="sheet" hidden></div>
+<div id="scan" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+const KEY='vanstock.v1';
+const TYPES={qty:'Quantity only (no barcode)',bqty:'Barcode – quantity only',serial:'Barcode – track serial numbers'};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,10);
+let S={items:[],log:[]};
+try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);}catch(e){}
+S.items=S.items||[];S.log=S.log||[];
+let saveErr=false;
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){if(!saveErr){saveErr=true;alert('Could not save data on this device. Storage may be blocked or full.');}}}
+const qty=i=>i.type==='serial'?i.serials.length:i.qty;
+const isLow=i=>i.min>0&&qty(i)<i.min;
+const lowItems=()=>S.items.filter(isLow);
+const byName=(a,b)=>a.name.localeCompare(b.name);
+function logit(i,delta,serial){S.log.unshift({t:Date.now(),name:i.name,delta,serial:serial||''});S.log=S.log.slice(0,200);}
+
+/* ---------- toast / alerts ---------- */
+let tt;
+function toast(msg,undo,warn){
+  const t=$('#toast');t.className=warn?'warn':'';t.hidden=false;
+  t.innerHTML='<span class="grow">'+esc(msg)+'</span>'+(undo?'<button id="undo">UNDO</button>':'');
+  if(undo)$('#undo').onclick=()=>{undo();t.hidden=true;save();render();};
+  clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,warn?6000:3500);
+}
+function alertLow(i){
+  if(!isLow(i))return;
+  const m='Low stock: '+i.name+' – '+qty(i)+' left (min '+i.min+')';
+  toast(m,null,true);
+  try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){}
+  try{if('Notification' in window&&Notification.permission==='granted')new Notification('Low stock',{body:m});}catch(e){}
+}
+
+/* ---------- navigation ---------- */
+let tab='stock',filterLow=false,search='',P={},PS={};
+const TABS=[['stock','📦','Stock'],['use','➖','Use'],['add','➕','Add'],['report','📄','Report'],['more','⚙️','More']];
+function render(){
+  $('#nav').innerHTML=TABS.map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?'on':''}"><b>${t[1]}</b>${t[2]}</button>`).join('');
+  const lo=lowItems(),b=$('#banner');
+  if(lo.length){b.hidden=false;b.textContent='⚠ Below minimum: '+lo.map(i=>i.name+' ('+qty(i)+'/'+i.min+')').join(', ');}else b.hidden=true;
+  ({stock:vStock,use:vUse,add:vAdd,report:vReport,more:vMore})[tab]();
+}
+$('#nav').onclick=e=>{const b=e.target.closest('button');if(b){tab=b.dataset.tab;if(tab!=='add')addDraft=null;render();window.scrollTo(0,0);}};
+$('#banner').onclick=()=>{tab='stock';filterLow=true;render();};
+
+/* ---------- STOCK ---------- */
+function vStock(){
+  $('#main').innerHTML=`<input id="q" placeholder="Search items or barcodes…" value="${esc(search)}">
+  <label class="row" style="margin:10px 0"><input type="checkbox" id="lo" style="width:auto" ${filterLow?'checked':''}> Show only items below minimum</label>
+  <div id="list"></div>`;
+  $('#q').oninput=e=>{search=e.target.value;list();};
+  $('#lo').onchange=e=>{filterLow=e.target.checked;list();};
+  list();
+}
+function list(){
+  const q=search.toLowerCase();
+  const items=S.items.filter(i=>(!filterLow||isLow(i))&&(!q||i.name.toLowerCase().includes(q)||(i.barcode||'').toLowerCase().includes(q)||(i.serials||[]).some(s=>s.toLowerCase().includes(q)))).sort(byName);
+  $('#list').innerHTML=items.length?items.map(i=>`<div class="card ${isLow(i)?'low':''}" data-id="${i.id}"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><div class="sub">Min ${i.min}${i.type==='bqty'&&i.barcode?' · '+esc(i.barcode):''}</div><span class="tag">${TYPES[i.type]}</span></div><div class="big">${qty(i)}</div></div></div>`).join(''):`<p class="sub">${S.items.length?'No matching items.':'No items yet. Use the Add tab to create your first item.'}</p>`;
+  $('#list').onclick=e=>{const c=e.target.closest('.card');if(c)openItem(c.dataset.id);};
+}
+
+/* ---------- item editor sheet ---------- */
+let D=null;
+function openItem(id){D=JSON.parse(JSON.stringify(S.items.find(i=>i.id===id)));D._orig=id;sheetItem();}
+function sheetItem(){
+  const sh=$('#sheet');sh.hidden=false;
+  sh.innerHTML=`<div>
+  <div class="row"><h2 class="grow" style="margin:0">Edit item</h2><button class="b sec" id="x">Close</button></div>
+  <label class="f">Name</label><input id="n" value="${esc(D.name)}">
+  <label class="f">Minimum quantity (alert when below)</label><input id="m" type="number" min="0" inputmode="numeric" value="${D.min}">
+  ${D.type==='bqty'?`<label class="f">Barcode</label><div class="row"><input id="bc" value="${esc(D.barcode||'')}"><button class="b sec" id="sbc">Scan</button></div>`:''}
+  ${D.type==='serial'?`<label class="f">Serial numbers in stock (${D.serials.length})</label>
+    <div class="chips">${D.serials.map((s,k)=>`<button class="chip" data-rm="${k}">${esc(s)} ✕</button>`).join('')||'<span class="sub">None</span>'}</div>
+    <div class="row" style="margin-top:10px"><input id="sn" placeholder="Type a serial number"><button class="b sec" id="asn">Add</button></div>
+    <button class="b full" id="sin" style="margin-top:10px">📷 Scan serials in</button>`:`
+    <label class="f">Quantity in stock</label>
+    <div class="row"><div class="step"><button id="dm">−</button><span id="dq">${D.qty}</span><button id="dp">+</button></div>
+    ${D.type==='bqty'?'<button class="b sec" id="qin">📷 Scan in</button>':''}</div>`}
+  <div class="row" style="margin-top:18px"><button class="b grow" id="sv">Save</button><button class="b bad" id="dl">Delete</button></div></div>`;
+  const keep=()=>{D.name=$('#n').value;D.min=Math.max(0,parseInt($('#m').value)||0);if($('#bc'))D.barcode=$('#bc').value.trim();};
+  $('#x').onclick=()=>{sh.hidden=true;D=null;};
+  if($('#sbc'))$('#sbc').onclick=()=>{keep();openScanner({title:'Scan item barcode',single:true,onCode:c=>{D.barcode=c;sheetItem();return 'ok';}});};
+  if($('#dm'))$('#dm').onclick=()=>{keep();D.qty=Math.max(0,D.qty-1);sheetItem();};
+  if($('#dp'))$('#dp').onclick=()=>{keep();D.qty++;sheetItem();};
+  if($('#qin'))$('#qin').onclick=()=>{keep();openScanner({title:'Scan in: '+D.name,onCode:c=>{if(c!==D.barcode){return D.barcode?'Does not match this item\'s barcode':(D.barcode=c,D.qty++,'Barcode set. In stock: '+D.qty);}D.qty++;return 'Added. In stock: '+D.qty;},onClose:sheetItem});};
+  sh.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{keep();D.serials.splice(+b.dataset.rm,1);sheetItem();});
+  if($('#asn'))$('#asn').onclick=()=>{keep();const s=$('#sn').value.trim();if(!s)return;const r=addSerial(s);if(r)toast(r,null,true);sheetItem();};
+  if($('#sin'))$('#sin').onclick=()=>{keep();openScanner({title:'Scan serials in: '+D.name,onCode:c=>addSerial(c)||'Added '+c+' ('+D.serials.length+' in stock)',onClose:sheetItem});};
+  $('#sv').onclick=()=>{keep();if(!D.name.trim()){toast('Enter a name',null,true);return;}
+    const i=S.items.find(x=>x.id===D._orig);const before=qty(i);
+    Object.assign(i,{name:D.name.trim(),min:D.min,barcode:D.barcode||'',qty:D.qty,serials:D.serials});
+    if(qty(i)!==before)logit(i,qty(i)-before,'edit');
+    save();sh.hidden=true;D=null;render();alertLow(i);};
+  $('#dl').onclick=()=>{if(confirm('Delete "'+D.name+'"?')){S.items=S.items.filter(x=>x.id!==D._orig);save();sh.hidden=true;D=null;render();}};
+}
+function serialOwner(s){return S.items.find(i=>i.type==='serial'&&i.serials.includes(s));}
+function addSerial(s,target){
+  const t=target||D;
+  if(t.serials.includes(s))return 'Already in this item: '+s;
+  const o=serialOwner(s);if(o&&o.id!==t.id&&o.id!==t._orig)return s+' is already recorded under '+o.name;
+  if(o&&(o.id===t.id||o.id===t._orig)&&!t.serials.includes(s)){/* removed in edit, allow re-add */}
+  t.serials.push(s);return '';
+}
+
+/* ---------- USE ---------- */
+function vUse(){
+  const items=S.items.slice().sort(byName);
+  const n=Object.values(P).reduce((a,b)=>a+b,0)+Object.values(PS).reduce((a,b)=>a+b.size,0);
+  $('#main').innerHTML=`<button class="b full" id="scn">📷 Scan barcodes to use</button>
+  <p class="sub">Or pick what you've used below, then tap "Use selected".</p>
+  ${items.map(i=>i.type==='serial'?`<div class="card"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><span class="tag">Tap serials used</span></div><div class="big">${qty(i)}</div></div>
+    <div class="chips">${i.serials.map(s=>`<button class="chip ${PS[i.id]&&PS[i.id].has(s)?'sel':''}" data-ser="${i.id}" data-s="${esc(s)}">${esc(s)}</button>`).join('')||'<span class="sub">None in stock</span>'}</div></div>`
+    :`<div class="card ${isLow(i)?'low':''}"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><div class="sub">In stock: ${i.qty}</div></div>
+    <div class="step"><button data-m="${i.id}">−</button><span>${P[i.id]||0}</span><button data-p="${i.id}">+</button></div></div></div>`).join('')||'<p class="sub">No items yet.</p>'}
+  ${n?`<div class="stick"><button class="b full" id="go">Use selected (${n})</button></div>`:''}`;
+  $('#scn').onclick=()=>openScanner({title:'Scan items you are using',onCode:useByCode,onClose:render});
+  const m=$('#main');
+  m.onclick=e=>{
+    const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.p){const i=S.items.find(x=>x.id===b.dataset.p);P[i.id]=Math.min(i.qty,(P[i.id]||0)+1);vUse();}
+    else if(b.dataset.m){P[b.dataset.m]=Math.max(0,(P[b.dataset.m]||0)-1);if(!P[b.dataset.m])delete P[b.dataset.m];vUse();}
+    else if(b.dataset.ser){const set=PS[b.dataset.ser]||(PS[b.dataset.ser]=new Set());const s=b.dataset.s;set.has(s)?set.delete(s):set.add(s);vUse();}
+    else if(b.id==='go')applyUse();
+  };
+}
+function applyUse(){
+  const snap=JSON.stringify(S);const hit=[];
+  for(const id in P){const i=S.items.find(x=>x.id===id);if(!i)continue;const u=Math.min(P[id],i.qty);i.qty-=u;logit(i,-u);hit.push(i);}
+  for(const id in PS){const i=S.items.find(x=>x.id===id);if(!i)continue;PS[id].forEach(s=>{i.serials=i.serials.filter(x=>x!==s);logit(i,-1,s);});hit.push(i);}
+  P={};PS={};save();
+  toast('Stock updated',()=>{S=JSON.parse(snap);});render();
+  hit.forEach(alertLow);
+}
+function useByCode(code){
+  let i=serialOwner(code);
+  if(i){const snap=JSON.stringify(S);i.serials=i.serials.filter(s=>s!==code);logit(i,-1,code);save();
+    setTimeout(()=>alertLow(i),0);return '✔ Removed '+i.name+' ['+code+'] – '+i.serials.length+' left'+(isLow(i)?' ⚠ LOW':'');}
+  i=S.items.find(x=>x.type==='bqty'&&x.barcode===code);
+  if(i){if(i.qty<1)return '⚠ '+i.name+' already at 0';i.qty--;logit(i,-1);save();setTimeout(()=>alertLow(i),0);return '✔ '+i.name+' – '+i.qty+' left'+(isLow(i)?' ⚠ LOW':'');}
+  return '✖ Unknown barcode: '+code;
+}
+
+/* ---------- ADD ---------- */
+let addDraft=null;
+function vAdd(){
+  const d=addDraft||(addDraft={name:'',type:'qty',barcode:'',min:0,qty:0});
+  $('#main').innerHTML=`<div class="card">
+  <label class="f">Item name</label><input id="n" value="${esc(d.name)}" placeholder="e.g. 15A fuse, Smoke alarm">
+  <label class="f">Type</label><select id="t">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${d.type===k?'selected':''}>${v}</option>`).join('')}</select>
+  ${d.type==='bqty'?`<label class="f">Barcode</label><div class="row"><input id="bc" value="${esc(d.barcode)}" placeholder="Scan or type"><button class="b sec" id="sbc">Scan</button></div>`:''}
+  ${d.type==='serial'?'<p class="sub">Each unit\'s barcode/serial is recorded individually. After saving, open the item to scan serials in.</p>':`<label class="f">Starting quantity</label><input id="q" type="number" min="0" inputmode="numeric" value="${d.qty}">`}
+  <label class="f">Minimum quantity (alert when below)</label><input id="m" type="number" min="0" inputmode="numeric" value="${d.min}">
+  <button class="b full" id="sv" style="margin-top:16px">Add item</button></div>`;
+  const keep=()=>{d.name=$('#n').value;d.type=$('#t').value;d.min=Math.max(0,parseInt($('#m').value)||0);if($('#q'))d.qty=Math.max(0,parseInt($('#q').value)||0);if($('#bc'))d.barcode=$('#bc').value.trim();};
+  $('#t').onchange=()=>{keep();vAdd();};
+  if($('#sbc'))$('#sbc').onclick=()=>{keep();openScanner({title:'Scan item barcode',single:true,onCode:c=>{d.barcode=c;return 'ok';},onClose:vAdd});};
+  $('#sv').onclick=()=>{keep();
+    if(!d.name.trim())return toast('Enter a name',null,true);
+    if(d.type==='bqty'&&!d.barcode)return toast('Scan or type the barcode',null,true);
+    if(d.type==='bqty'&&S.items.some(x=>x.barcode===d.barcode))return toast('That barcode is already used by another item',null,true);
+    const it={id:uid(),name:d.name.trim(),type:d.type,barcode:d.type==='bqty'?d.barcode:'',min:d.min,qty:d.type==='serial'?0:d.qty,serials:[]};
+    S.items.push(it);if(it.qty)logit(it,it.qty,'initial');save();addDraft=null;
+    if(it.type==='serial'){tab='stock';render();openItem(it.id);}else{toast('Added '+it.name);vAdd();}
+  };
+}
+
+/* ---------- REPORT ---------- */
+function groups(){
+  const s=S.items.slice().sort(byName);
+  return{low:s.filter(isLow),serial:s.filter(i=>i.type==='serial'),bqty:s.filter(i=>i.type==='bqty'),qty:s.filter(i=>i.type==='qty')};
+}
+function reportText(){
+  const g=groups(),L=['VAN STOCK REPORT',new Date().toLocaleString(),''];
+  const line=i=>'- '+i.name+': '+qty(i)+' remaining'+(i.min?' (min '+i.min+')':'')+(isLow(i)?'  ** LOW **':'');
+  L.push('BELOW MINIMUM');g.low.length?g.low.forEach(i=>L.push(line(i))):L.push('- none');
+  L.push('','1. BARCODE ITEMS – SERIAL NUMBERS REQUIRED');
+  g.serial.length?g.serial.forEach(i=>{L.push(line(i));i.serials.forEach(s=>L.push('    '+s));}):L.push('- none');
+  L.push('','2. BARCODE ITEMS – QUANTITY ONLY');g.bqty.length?g.bqty.forEach(i=>L.push(line(i))):L.push('- none');
+  L.push('','3. OTHER ITEMS – QUANTITY');g.qty.length?g.qty.forEach(i=>L.push(line(i))):L.push('- none');
+  return L.join('\n');
+}
+function vReport(){
+  const g=groups();
+  const tbl=(arr,ser)=>arr.length?`<table><tr><th>Item</th><th>Left</th><th>Min</th></tr>${arr.map(i=>`<tr><td>${esc(i.name)}${ser&&i.serials.length?`<div class="ser">${i.serials.map(esc).join(', ')}</div>`:''}</td><td><b ${isLow(i)?'style="color:var(--bad)"':''}>${qty(i)}</b></td><td>${i.min||'–'}</td></tr>`).join('')}</table>`:'<p class="sub">None</p>';
+  $('#main').innerHTML=`<div class="noprint row" style="gap:8px;flex-wrap:wrap"><button class="b" id="sh">Share</button><button class="b sec" id="cp">Copy</button><button class="b sec" id="pr">Print / PDF</button></div>
+  <div class="sub" style="margin:10px 0">${esc(new Date().toLocaleString())}</div>
+  <h2>⚠ Below minimum</h2>${tbl(g.low,false)}
+  <h2>1. Barcode items – serial numbers required</h2>${tbl(g.serial,true)}
+  <h2>2. Barcode items – quantity only</h2>${tbl(g.bqty,false)}
+  <h2>3. Other items – quantity</h2>${tbl(g.qty,false)}`;
+  $('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(reportText());toast('Copied');}catch(e){toast('Copy not available',null,true);}};
+  $('#sh').onclick=async()=>{try{if(navigator.share)await navigator.share({title:'Van stock report',text:reportText()});else{await navigator.clipboard.writeText(reportText());toast('Copied (sharing not supported)');}}catch(e){}};
+  $('#pr').onclick=()=>window.print();
+}
+
+/* ---------- MORE ---------- */
+function vMore(){
+  const h=S.log.slice(0,30).map(l=>`<tr><td>${new Date(l.t).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(l.name)}${l.serial&&l.serial!=='edit'&&l.serial!=='initial'?'<div class="ser">'+esc(l.serial)+'</div>':''}</td><td>${l.delta>0?'+':''}${l.delta}</td></tr>`).join('');
+  $('#main').innerHTML=`<div class="card"><div class="name">Low-stock alerts</div><p class="sub">Alerts show in the red banner and as a pop-up whenever stock falls below the minimum. Allow notifications to also get a system alert while the app is open.</p>
+  <button class="b sec" id="nt">Enable notifications</button></div>
+  <div class="card"><div class="name">Backup</div><p class="sub">Data lives only on this phone. Export a backup now and then.</p>
+  <div class="row" style="gap:8px;flex-wrap:wrap"><button class="b sec" id="ex">Export backup</button><label class="b sec">Import<input type="file" id="im" accept=".json,application/json" hidden></label></div></div>
+  <h2>Recent history</h2>${h?`<table>${h}</table>`:'<p class="sub">Nothing yet.</p>'}`;
+  $('#nt').onclick=async()=>{try{const r=await Notification.requestPermission();toast('Notifications: '+r);}catch(e){toast('Notifications not supported on this browser',null,true);}};
+  $('#ex').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));a.download='van-stock-'+new Date().toISOString().slice(0,10)+'.json';a.click();};
+  $('#im').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.items))throw 0;if(!confirm('Replace all current data with this backup?'))return;S=d;S.log=S.log||[];save();render();toast('Backup restored');}catch(x){toast('Not a valid backup file',null,true);}};r.readAsText(f);};
+}
+
+/* ---------- SCANNER ---------- */
+function openScanner(o){
+  const el=$('#scan');el.hidden=false;
+  const hasDet='BarcodeDetector' in window;
+  el.innerHTML=`<video playsinline muted></video><div class="pn"><div class="row"><b class="grow">${esc(o.title)}</b><button class="b sec" id="sx">Done</button></div>
+  <div class="msg" id="smsg">${hasDet?'Point the camera at a barcode…':'Camera scanning is not supported in this browser – type the code or use a Bluetooth scanner.'}</div>
+  <div class="row"><input id="sman" placeholder="Type or scan code here" autocomplete="off" autocapitalize="off"><button class="b" id="sok">OK</button></div></div>`;
+  let stream=null,run=true,last='',lastT=0,det=null;
+  const close=()=>{run=false;if(stream)stream.getTracks().forEach(t=>t.stop());el.hidden=true;el.innerHTML='';o.onClose&&o.onClose();};
+  const handle=c=>{c=String(c).trim();if(!c)return;const now=Date.now();if(c===last&&now-lastT<2500)return;last=c;lastT=now;
+    const r=o.onCode(c);$('#smsg').textContent=r;try{navigator.vibrate&&navigator.vibrate(60);}catch(e){}
+    if(o.single&&r){close();}};
+  $('#sx').onclick=close;
+  $('#sok').onclick=()=>{const v=$('#sman');handle(v.value);v.value='';v.focus();};
+  $('#sman').onkeydown=e=>{if(e.key==='Enter')$('#sok').click();};
+  if(!hasDet||!navigator.mediaDevices)return;
+  BarcodeDetector.getSupportedFormats().then(f=>{det=new BarcodeDetector({formats:f});return navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});})
+  .then(s=>{stream=s;const v=el.querySelector('video');if(!v){s.getTracks().forEach(t=>t.stop());return;}v.srcObject=s;v.play();
+    const tick=async()=>{if(!run)return;try{if(v.readyState>=2){const r=await det.detect(v);if(r.length)handle(r[0].rawValue);}}catch(e){}setTimeout(tick,200);};tick();})
+  .catch(()=>{const m=$('#smsg');if(m)m.textContent='Camera unavailable (permission denied or not a secure page). Type the code instead.';});
+}
+
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
