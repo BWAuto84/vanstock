@@ -77,9 +77,10 @@ const uid=()=>Math.random().toString(36).slice(2,10);
 let S={items:[],log:[]};
 try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);}catch(e){}
 S.items=S.items||[];S.log=S.log||[];
+S.items.forEach(i=>{i.serials=i.serials||[];if(i.type==='bqty'&&!Array.isArray(i.codes)){i.codes=[];for(let k=0;k<(i.qty||0);k++)i.codes.push(i.barcode||'(no code)');}});
 let saveErr=false;
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){if(!saveErr){saveErr=true;alert('Could not save data on this device. Storage may be blocked or full.');}}}
-const qty=i=>i.type==='serial'?i.serials.length:i.qty;
+const qty=i=>i.type==='serial'?i.serials.length:i.type==='bqty'?i.codes.length:i.qty;
 const isLow=i=>i.min>0&&qty(i)<i.min;
 const lowItems=()=>S.items.filter(isLow);
 const byName=(a,b)=>a.name.localeCompare(b.name);
@@ -104,7 +105,7 @@ function alertLow(i){
 }
 
 /* ---------- navigation ---------- */
-let tab='stock',filterLow=false,search='',P={},PS={};
+let tab='stock',filterLow=false,search='',P={},PS={},repSer=true;
 const TABS=[['stock','📦','Stock'],['use','➖','Use'],['add','➕','Add'],['report','📄','Report'],['more','⚙️','More']];
 function render(){
   $('#nav').innerHTML=TABS.map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?'on':''}"><b>${t[1]}</b>${t[2]}</button>`).join('');
@@ -126,8 +127,8 @@ function vStock(){
 }
 function list(){
   const q=search.toLowerCase();
-  const items=S.items.filter(i=>(!filterLow||isLow(i))&&(!q||i.name.toLowerCase().includes(q)||(i.barcode||'').toLowerCase().includes(q)||(i.serials||[]).some(s=>s.toLowerCase().includes(q)))).sort(byName);
-  $('#list').innerHTML=items.length?items.map(i=>`<div class="card ${isLow(i)?'low':''}" data-id="${i.id}"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><div class="sub">Min ${i.min}${i.type==='bqty'&&i.barcode?' · '+esc(i.barcode):''}</div><span class="tag">${TYPES[i.type]}</span></div><div class="big">${qty(i)}</div></div></div>`).join(''):`<p class="sub">${S.items.length?'No matching items.':'No items yet. Use the Add tab to create your first item.'}</p>`;
+  const items=S.items.filter(i=>(!filterLow||isLow(i))&&(!q||i.name.toLowerCase().includes(q)||(i.codes||[]).some(s=>s.toLowerCase().includes(q))||(i.serials||[]).some(s=>s.toLowerCase().includes(q)))).sort(byName);
+  $('#list').innerHTML=items.length?items.map(i=>`<div class="card ${isLow(i)?'low':''}" data-id="${i.id}"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><div class="sub">Min ${i.min}</div><span class="tag">${TYPES[i.type]}</span></div><div class="big">${qty(i)}</div></div></div>`).join(''):`<p class="sub">${S.items.length?'No matching items.':'No items yet. Use the Add tab to create your first item.'}</p>`;
   $('#list').onclick=e=>{const c=e.target.closest('.card');if(c)openItem(c.dataset.id);};
 }
 
@@ -140,36 +141,43 @@ function sheetItem(){
   <div class="row"><h2 class="grow" style="margin:0">Edit item</h2><button class="b sec" id="x">Close</button></div>
   <label class="f">Name</label><input id="n" value="${esc(D.name)}">
   <label class="f">Minimum quantity (alert when below)</label><input id="m" type="number" min="0" inputmode="numeric" value="${D.min}">
-  ${D.type==='bqty'?`<label class="f">Barcode</label><div class="row"><input id="bc" value="${esc(D.barcode||'')}"><button class="b sec" id="sbc">Scan</button></div>`:''}
   ${D.type==='serial'?`<label class="f">Serial numbers in stock (${D.serials.length})</label>
     <div class="chips">${D.serials.map((s,k)=>`<button class="chip" data-rm="${k}">${esc(s)} ✕</button>`).join('')||'<span class="sub">None</span>'}</div>
     <div class="row" style="margin-top:10px"><input id="sn" placeholder="Type a serial number"><button class="b sec" id="asn">Add</button></div>
-    <button class="b full" id="sin" style="margin-top:10px">📷 Scan serials in</button>`:`
+    <button class="b full" id="sin" style="margin-top:10px">📷 Scan serials in</button>`:D.type==='bqty'?`
+    <label class="f">Quantity in stock</label><div class="big" style="text-align:left">${D.codes.length}</div>
+    <button class="b full" id="qin" style="margin-top:8px">📷 Batch scan in</button>
+    <div class="row" style="margin-top:10px"><input id="cn" placeholder="Or type a barcode"><button class="b sec" id="acn">Add</button></div>
+    <label class="f">Scanned barcodes – tap one to remove a unit</label>
+    <div class="chips">${codeChips(D.codes)}</div>`:`
     <label class="f">Quantity in stock</label>
-    <div class="row"><div class="step"><button id="dm">−</button><span id="dq">${D.qty}</span><button id="dp">+</button></div>
-    ${D.type==='bqty'?'<button class="b sec" id="qin">📷 Scan in</button>':''}</div>`}
+    <div class="row"><div class="step"><button id="dm">−</button><span id="dq">${D.qty}</span><button id="dp">+</button></div></div>`}
   <div class="row" style="margin-top:18px"><button class="b grow" id="sv">Save</button><button class="b bad" id="dl">Delete</button></div></div>`;
   const keep=()=>{D.name=$('#n').value;D.min=Math.max(0,parseInt($('#m').value)||0);if($('#bc'))D.barcode=$('#bc').value.trim();};
   $('#x').onclick=()=>{sh.hidden=true;D=null;};
-  if($('#sbc'))$('#sbc').onclick=()=>{keep();openScanner({title:'Scan item barcode',single:true,onCode:c=>{D.barcode=c;sheetItem();return 'ok';}});};
   if($('#dm'))$('#dm').onclick=()=>{keep();D.qty=Math.max(0,D.qty-1);sheetItem();};
   if($('#dp'))$('#dp').onclick=()=>{keep();D.qty++;sheetItem();};
-  if($('#qin'))$('#qin').onclick=()=>{keep();openScanner({title:'Scan in: '+D.name,onCode:c=>{if(c!==D.barcode){return D.barcode?'Does not match this item\'s barcode':(D.barcode=c,D.qty++,'Barcode set. In stock: '+D.qty);}D.qty++;return 'Added. In stock: '+D.qty;},onClose:sheetItem});};
+  if($('#qin'))$('#qin').onclick=()=>{keep();openScanner({title:'Batch scan in: '+D.name,onCode:c=>addCode(c)||('✔ Added – '+D.codes.length+' in stock'),onClose:sheetItem});};
+  if($('#acn'))$('#acn').onclick=()=>{keep();const c=$('#cn').value.trim();if(!c)return;const r=addCode(c);if(r)toast(r,null,true);sheetItem();};
+  sh.querySelectorAll('[data-rc]').forEach(b=>b.onclick=()=>{keep();const k=D.codes.indexOf(b.dataset.rc);if(k>=0)D.codes.splice(k,1);sheetItem();});
   sh.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{keep();D.serials.splice(+b.dataset.rm,1);sheetItem();});
   if($('#asn'))$('#asn').onclick=()=>{keep();const s=$('#sn').value.trim();if(!s)return;const r=addSerial(s);if(r)toast(r,null,true);sheetItem();};
   if($('#sin'))$('#sin').onclick=()=>{keep();openScanner({title:'Scan serials in: '+D.name,onCode:c=>addSerial(c)||'Added '+c+' ('+D.serials.length+' in stock)',onClose:sheetItem});};
   $('#sv').onclick=()=>{keep();if(!D.name.trim()){toast('Enter a name',null,true);return;}
     const i=S.items.find(x=>x.id===D._orig);const before=qty(i);
-    Object.assign(i,{name:D.name.trim(),min:D.min,barcode:D.barcode||'',qty:D.qty,serials:D.serials});
+    Object.assign(i,{name:D.name.trim(),min:D.min,qty:D.qty,serials:D.serials,codes:D.codes||[]});
     if(qty(i)!==before)logit(i,qty(i)-before,'edit');
     save();sh.hidden=true;D=null;render();alertLow(i);};
   $('#dl').onclick=()=>{if(confirm('Delete "'+D.name+'"?')){S.items=S.items.filter(x=>x.id!==D._orig);save();sh.hidden=true;D=null;render();}};
 }
 function serialOwner(s){return S.items.find(i=>i.type==='serial'&&i.serials.includes(s));}
+function codeOwner(c){return S.items.find(i=>(i.type==='serial'&&i.serials.includes(c))||(i.type==='bqty'&&(i.codes||[]).includes(c)));}
+function addCode(c,t){t=t||D;const o=codeOwner(c);if(o&&o.id!==t.id&&o.id!==t._orig)return '✖ '+c+' is already recorded under '+o.name;t.codes.push(c);return '';}
+function codeChips(arr){const m=new Map();arr.forEach(c=>m.set(c,(m.get(c)||0)+1));return m.size?[...m].map(([c,n])=>`<button class="chip" data-rc="${esc(c)}">${esc(c)}${n>1?' ×'+n:''} ✕</button>`).join(''):'<span class="sub">None yet</span>';}
 function addSerial(s,target){
   const t=target||D;
   if(t.serials.includes(s))return 'Already in this item: '+s;
-  const o=serialOwner(s);if(o&&o.id!==t.id&&o.id!==t._orig)return s+' is already recorded under '+o.name;
+  const o=codeOwner(s);if(o&&o.id!==t.id&&o.id!==t._orig)return s+' is already recorded under '+o.name;
   if(o&&(o.id===t.id||o.id===t._orig)&&!t.serials.includes(s)){/* removed in edit, allow re-add */}
   t.serials.push(s);return '';
 }
@@ -182,14 +190,14 @@ function vUse(){
   <p class="sub">Or pick what you've used below, then tap "Use selected".</p>
   ${items.map(i=>i.type==='serial'?`<div class="card"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><span class="tag">Tap serials used</span></div><div class="big">${qty(i)}</div></div>
     <div class="chips">${i.serials.map(s=>`<button class="chip ${PS[i.id]&&PS[i.id].has(s)?'sel':''}" data-ser="${i.id}" data-s="${esc(s)}">${esc(s)}</button>`).join('')||'<span class="sub">None in stock</span>'}</div></div>`
-    :`<div class="card ${isLow(i)?'low':''}"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><div class="sub">In stock: ${i.qty}</div></div>
+    :`<div class="card ${isLow(i)?'low':''}"><div class="row"><div class="grow"><div class="name">${esc(i.name)}</div><div class="sub">In stock: ${qty(i)}</div></div>
     <div class="step"><button data-m="${i.id}">−</button><span>${P[i.id]||0}</span><button data-p="${i.id}">+</button></div></div></div>`).join('')||'<p class="sub">No items yet.</p>'}
   ${n?`<div class="stick"><button class="b full" id="go">Use selected (${n})</button></div>`:''}`;
   $('#scn').onclick=()=>openScanner({title:'Scan items you are using',onCode:useByCode,onClose:render});
   const m=$('#main');
   m.onclick=e=>{
     const b=e.target.closest('button');if(!b)return;
-    if(b.dataset.p){const i=S.items.find(x=>x.id===b.dataset.p);P[i.id]=Math.min(i.qty,(P[i.id]||0)+1);vUse();}
+    if(b.dataset.p){const i=S.items.find(x=>x.id===b.dataset.p);P[i.id]=Math.min(qty(i),(P[i.id]||0)+1);vUse();}
     else if(b.dataset.m){P[b.dataset.m]=Math.max(0,(P[b.dataset.m]||0)-1);if(!P[b.dataset.m])delete P[b.dataset.m];vUse();}
     else if(b.dataset.ser){const set=PS[b.dataset.ser]||(PS[b.dataset.ser]=new Set());const s=b.dataset.s;set.has(s)?set.delete(s):set.add(s);vUse();}
     else if(b.id==='go')applyUse();
@@ -197,7 +205,7 @@ function vUse(){
 }
 function applyUse(){
   const snap=JSON.stringify(S);const hit=[];
-  for(const id in P){const i=S.items.find(x=>x.id===id);if(!i)continue;const u=Math.min(P[id],i.qty);i.qty-=u;logit(i,-u);hit.push(i);}
+  for(const id in P){const i=S.items.find(x=>x.id===id);if(!i)continue;const u=Math.min(P[id],qty(i));if(!u)continue;if(i.type==='bqty')i.codes.splice(i.codes.length-u,u);else i.qty-=u;logit(i,-u);hit.push(i);}
   for(const id in PS){const i=S.items.find(x=>x.id===id);if(!i)continue;PS[id].forEach(s=>{i.serials=i.serials.filter(x=>x!==s);logit(i,-1,s);});hit.push(i);}
   P={};PS={};save();
   toast('Stock updated',()=>{S=JSON.parse(snap);});render();
@@ -207,8 +215,8 @@ function useByCode(code){
   let i=serialOwner(code);
   if(i){const snap=JSON.stringify(S);i.serials=i.serials.filter(s=>s!==code);logit(i,-1,code);save();
     setTimeout(()=>alertLow(i),0);return '✔ Removed '+i.name+' ['+code+'] – '+i.serials.length+' left'+(isLow(i)?' ⚠ LOW':'');}
-  i=S.items.find(x=>x.type==='bqty'&&x.barcode===code);
-  if(i){if(i.qty<1)return '⚠ '+i.name+' already at 0';i.qty--;logit(i,-1);save();setTimeout(()=>alertLow(i),0);return '✔ '+i.name+' – '+i.qty+' left'+(isLow(i)?' ⚠ LOW':'');}
+  i=S.items.find(x=>x.type==='bqty'&&x.codes.includes(code));
+  if(i){i.codes.splice(i.codes.indexOf(code),1);logit(i,-1);save();setTimeout(()=>alertLow(i),0);return '✔ '+i.name+' – '+qty(i)+' left'+(isLow(i)?' ⚠ LOW':'');}
   return '✖ Unknown barcode: '+code;
 }
 
@@ -219,20 +227,16 @@ function vAdd(){
   $('#main').innerHTML=`<div class="card">
   <label class="f">Item name</label><input id="n" value="${esc(d.name)}" placeholder="e.g. 15A fuse, Smoke alarm">
   <label class="f">Type</label><select id="t">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${d.type===k?'selected':''}>${v}</option>`).join('')}</select>
-  ${d.type==='bqty'?`<label class="f">Barcode</label><div class="row"><input id="bc" value="${esc(d.barcode)}" placeholder="Scan or type"><button class="b sec" id="sbc">Scan</button></div>`:''}
-  ${d.type==='serial'?'<p class="sub">Each unit\'s barcode/serial is recorded individually. After saving, open the item to scan serials in.</p>':`<label class="f">Starting quantity</label><input id="q" type="number" min="0" inputmode="numeric" value="${d.qty}">`}
+  ${d.type==='serial'?'<p class="sub">Each unit\'s barcode/serial is recorded individually and shown in the report. After saving, the item opens so you can scan serials in.</p>':d.type==='bqty'?'<p class="sub">After saving, the item opens so you can batch scan units in. Barcodes are kept only so you can scan units out; the report shows quantity only.</p>':`<label class="f">Starting quantity</label><input id="q" type="number" min="0" inputmode="numeric" value="${d.qty}">`}
   <label class="f">Minimum quantity (alert when below)</label><input id="m" type="number" min="0" inputmode="numeric" value="${d.min}">
   <button class="b full" id="sv" style="margin-top:16px">Add item</button></div>`;
   const keep=()=>{d.name=$('#n').value;d.type=$('#t').value;d.min=Math.max(0,parseInt($('#m').value)||0);if($('#q'))d.qty=Math.max(0,parseInt($('#q').value)||0);if($('#bc'))d.barcode=$('#bc').value.trim();};
   $('#t').onchange=()=>{keep();vAdd();};
-  if($('#sbc'))$('#sbc').onclick=()=>{keep();openScanner({title:'Scan item barcode',single:true,onCode:c=>{d.barcode=c;return 'ok';},onClose:vAdd});};
   $('#sv').onclick=()=>{keep();
     if(!d.name.trim())return toast('Enter a name',null,true);
-    if(d.type==='bqty'&&!d.barcode)return toast('Scan or type the barcode',null,true);
-    if(d.type==='bqty'&&S.items.some(x=>x.barcode===d.barcode))return toast('That barcode is already used by another item',null,true);
-    const it={id:uid(),name:d.name.trim(),type:d.type,barcode:d.type==='bqty'?d.barcode:'',min:d.min,qty:d.type==='serial'?0:d.qty,serials:[]};
+    const it={id:uid(),name:d.name.trim(),type:d.type,barcode:'',min:d.min,qty:d.type==='qty'?d.qty:0,serials:[],codes:[]};
     S.items.push(it);if(it.qty)logit(it,it.qty,'initial');save();addDraft=null;
-    if(it.type==='serial'){tab='stock';render();openItem(it.id);}else{toast('Added '+it.name);vAdd();}
+    if(it.type!=='qty'){tab='stock';render();openItem(it.id);}else{toast('Added '+it.name);vAdd();}
   };
 }
 
@@ -246,15 +250,16 @@ function reportText(){
   const line=i=>'- '+i.name+': '+qty(i)+' remaining'+(i.min?' (min '+i.min+')':'')+(isLow(i)?'  ** LOW **':'');
   L.push('BELOW MINIMUM');g.low.length?g.low.forEach(i=>L.push(line(i))):L.push('- none');
   L.push('','1. BARCODE ITEMS – SERIAL NUMBERS REQUIRED');
-  g.serial.length?g.serial.forEach(i=>{L.push(line(i));i.serials.forEach(s=>L.push('    '+s));}):L.push('- none');
+  g.serial.length?g.serial.forEach(i=>{L.push(line(i));if(repSer)i.serials.forEach(s=>L.push('    '+s));}):L.push('- none');
   L.push('','2. BARCODE ITEMS – QUANTITY ONLY');g.bqty.length?g.bqty.forEach(i=>L.push(line(i))):L.push('- none');
   L.push('','3. OTHER ITEMS – QUANTITY');g.qty.length?g.qty.forEach(i=>L.push(line(i))):L.push('- none');
   return L.join('\n');
 }
 function vReport(){
   const g=groups();
-  const tbl=(arr,ser)=>arr.length?`<table><tr><th>Item</th><th>Left</th><th>Min</th></tr>${arr.map(i=>`<tr><td>${esc(i.name)}${ser&&i.serials.length?`<div class="ser">${i.serials.map(esc).join(', ')}</div>`:''}</td><td><b ${isLow(i)?'style="color:var(--bad)"':''}>${qty(i)}</b></td><td>${i.min||'–'}</td></tr>`).join('')}</table>`:'<p class="sub">None</p>';
+  const tbl=(arr,ser)=>arr.length?`<table><tr><th>Item</th><th>Left</th><th>Min</th></tr>${arr.map(i=>`<tr><td>${esc(i.name)}${ser&&repSer&&i.serials.length?`<div class="ser">${i.serials.map(esc).join(', ')}</div>`:''}</td><td><b ${isLow(i)?'style="color:var(--bad)"':''}>${qty(i)}</b></td><td>${i.min||'–'}</td></tr>`).join('')}</table>`:'<p class="sub">None</p>';
   $('#main').innerHTML=`<div class="noprint row" style="gap:8px;flex-wrap:wrap"><button class="b" id="sh">Share</button><button class="b sec" id="cp">Copy</button><button class="b sec" id="pr">Print / PDF</button></div>
+  <label class="row noprint" style="margin:10px 0"><input type="checkbox" id="rs" style="width:auto" ${repSer?'checked':''}> List serial numbers for serial-tracked items</label>
   <div class="sub" style="margin:10px 0">${esc(new Date().toLocaleString())}</div>
   <h2>⚠ Below minimum</h2>${tbl(g.low,false)}
   <h2>1. Barcode items – serial numbers required</h2>${tbl(g.serial,true)}
@@ -263,6 +268,7 @@ function vReport(){
   $('#cp').onclick=async()=>{try{await navigator.clipboard.writeText(reportText());toast('Copied');}catch(e){toast('Copy not available',null,true);}};
   $('#sh').onclick=async()=>{try{if(navigator.share)await navigator.share({title:'Van stock report',text:reportText()});else{await navigator.clipboard.writeText(reportText());toast('Copied (sharing not supported)');}}catch(e){}};
   $('#pr').onclick=()=>window.print();
+  $('#rs').onchange=e=>{repSer=e.target.checked;vReport();};
 }
 
 /* ---------- MORE ---------- */
@@ -279,6 +285,7 @@ function vMore(){
 }
 
 /* ---------- SCANNER ---------- */
+function beep(ok){try{const a=new(window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator();o.frequency.value=ok?880:220;o.connect(a.destination);o.start();setTimeout(()=>{try{o.stop();a.close();}catch(e){}},ok?90:250);}catch(e){}}
 function openScanner(o){
   const el=$('#scan');el.hidden=false;
   const hasDet='BarcodeDetector' in window;
@@ -287,8 +294,11 @@ function openScanner(o){
   <div class="row"><input id="sman" placeholder="Type or scan code here" autocomplete="off" autocapitalize="off"><button class="b" id="sok">OK</button></div></div>`;
   let stream=null,run=true,last='',lastT=0,det=null;
   const close=()=>{run=false;if(stream)stream.getTracks().forEach(t=>t.stop());el.hidden=true;el.innerHTML='';o.onClose&&o.onClose();};
-  const handle=c=>{c=String(c).trim();if(!c)return;const now=Date.now();if(c===last&&now-lastT<2500)return;last=c;lastT=now;
+  /* Camera: a code held in view counts once; take it out of view (~1s) and show it again to count another identical code. */
+  const handle=(c,cam)=>{c=String(c).trim();if(!c)return;const now=Date.now();
+    if(cam){const same=c===last&&now-lastT<1000;last=c;lastT=now;if(same)return;}
     const r=o.onCode(c);$('#smsg').textContent=r;try{navigator.vibrate&&navigator.vibrate(60);}catch(e){}
+    beep(!/^(✖|⚠)/.test(r));
     if(o.single&&r){close();}};
   $('#sx').onclick=close;
   $('#sok').onclick=()=>{const v=$('#sman');handle(v.value);v.value='';v.focus();};
@@ -296,7 +306,7 @@ function openScanner(o){
   if(!hasDet||!navigator.mediaDevices)return;
   BarcodeDetector.getSupportedFormats().then(f=>{det=new BarcodeDetector({formats:f});return navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});})
   .then(s=>{stream=s;const v=el.querySelector('video');if(!v){s.getTracks().forEach(t=>t.stop());return;}v.srcObject=s;v.play();
-    const tick=async()=>{if(!run)return;try{if(v.readyState>=2){const r=await det.detect(v);if(r.length)handle(r[0].rawValue);}}catch(e){}setTimeout(tick,200);};tick();})
+    const tick=async()=>{if(!run)return;try{if(v.readyState>=2){const r=await det.detect(v);if(r.length)handle(r[0].rawValue,true);}}catch(e){}setTimeout(tick,200);};tick();})
   .catch(()=>{const m=$('#smsg');if(m)m.textContent='Camera unavailable (permission denied or not a secure page). Type the code instead.';});
 }
 
